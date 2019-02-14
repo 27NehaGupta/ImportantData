@@ -1,0 +1,537 @@
+
+
+import android.Manifest;
+import android.app.NotificationManager;
+import android.content.Context;
+import android.content.Intent;
+import android.databinding.DataBindingUtil;
+import android.os.Build;
+import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.v4.content.res.ResourcesCompat;
+import android.util.Log;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.Toast;
+
+import com.ebabu.AppName.R;
+import com.ebabu.AppName.bean.GenericResponse;
+import com.ebabu.AppName.bean.User;
+import com.ebabu.AppName.constant.Constant;
+import com.ebabu.AppName.constant.ConstantUrl;
+import com.ebabu.AppName.customview.CircularLoading;
+import com.ebabu.AppName.databinding.ActivityLoginBinding;
+import com.ebabu.AppName.interfaces.ApiResponse;
+import com.ebabu.AppName.rest.ApiClient;
+import com.ebabu.AppName.rest.ApiInterface;
+import com.ebabu.AppName.rest.Repository;
+import com.ebabu.AppName.utility.PermissionsUtils;
+import com.ebabu.AppName.utility.RegisteFCMId;
+import com.ebabu.AppName.utility.Utils;
+import com.ebabu.AppName.utility.ValidationUtils;
+import com.facebook.AccessToken;
+import com.facebook.CallbackManager;
+import com.facebook.FacebookCallback;
+import com.facebook.FacebookException;
+import com.facebook.FacebookSdk;
+import com.facebook.GraphRequest;
+import com.facebook.GraphResponse;
+import com.facebook.internal.CallbackManagerImpl;
+import com.facebook.login.LoginManager;
+import com.facebook.login.LoginResult;
+import com.google.android.gms.auth.api.Auth;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+import com.google.android.gms.auth.api.signin.GoogleSignInResult;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.Arrays;
+
+import retrofit2.Call;
+
+import static com.ebabu.AppName.activity.SignupActivity.GOOGLE_LOGIN;
+
+public class LoginActivity extends BaseClass implements ApiResponse, GoogleApiClient.OnConnectionFailedListener {
+
+    public static final int GOOGLE_LOGIN = 1;
+    private Context mContext;
+    public ActivityLoginBinding mActivityLoginBinding;
+    private LoginClickHandler loginClickHandler;
+    private CircularLoading mCircularLoading;
+    private GoogleApiClient mGoogleApiClient;
+    String name = "", gender, profilePic = "", gcmId = "", email = "", fbId = "", fbToken = "";
+    private int indicator = 0;
+    private CallbackManager callbackManager;
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        mActivityLoginBinding = DataBindingUtil.setContentView(this, R.layout.activity_login);
+        mContext = this;
+        init();
+        initGp();
+    }
+    @Override
+    public void onResume() {
+        super.onResume();
+        Utils.setSharedPreferenceBoolean(mContext, Constant.OTP_RECEIVE, false);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+      /*  mActivityLoginBinding.etMobile.setText("");
+        mActivityLoginBinding.etMobile.requestFocus();
+        mActivityLoginBinding.etPassword.setText("");*/
+    }
+
+
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == GOOGLE_LOGIN) {
+            if (resultCode == RESULT_OK) {
+                GoogleSignInResult result = Auth.GoogleSignInApi.getSignInResultFromIntent(data);
+                Log.e("result", "" + result);
+                handleSignInResult(result);
+            } else {
+                Utils.showToast(mContext, getString(R.string.Authentication_Failed));
+                // Toast.makeText(context, "Authentication Failed", Toast.LENGTH_SHORT).show();
+                mGoogleApiClient.clearDefaultAccountAndReconnect();
+            }
+        } else if (requestCode == CallbackManagerImpl.RequestCodeOffset.Login.toRequestCode()) {
+            if (resultCode == RESULT_OK) {
+                callbackManager.onActivityResult(requestCode, resultCode, data);
+            } else {
+                Utils.showToast(mContext, getString(R.string.Authentication_Failed));
+            }
+        }
+    }
+
+    private void initGp() {
+        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).requestEmail().requestId().requestProfile().build();
+        mGoogleApiClient = new GoogleApiClient.Builder(this).enableAutoManage(this, this).addApi(Auth.GOOGLE_SIGN_IN_API, gso).build();
+    }
+
+
+    private void handleSignInResult(GoogleSignInResult result) {
+        //MyDialog_Progress.open(c);
+        mCircularLoading.show(getString(R.string.Please_wait));
+        mGoogleApiClient.clearDefaultAccountAndReconnect();
+        Log.e("SignIN", "GOOGLE LOGIN IN SUCCESS :" + result.isSuccess());
+        if (result.isSuccess()) {
+            // Signed in successfully, show authenticated UI.
+            GoogleSignInAccount acct = result.getSignInAccount();
+           /* email = Utils.validateString(acct.getEmail());
+            name = Utility.validateString(acct.getDisplayName());
+            profilePic = Utility.validateString(acct.getPhotoUrl() + "");
+*/
+            Log.e("In hangleSign", "" + acct);
+            Log.e("Email: " + acct.getEmail(), "Name: " + acct.getDisplayName() + "ProfilePic: " + acct.getPhotoUrl());
+            email = acct.getEmail();
+            name = acct.getDisplayName();
+            fbId = acct.getId();
+            profilePic = String.valueOf(acct.getPhotoUrl());
+            //profilePic=profilePic.replace("http","https");
+            if (email == null)
+                email = "";
+            if (name == null)
+                name = "";
+            if (profilePic == null)
+                profilePic = "";
+            Log.e("Email: " + email, "fbid" + fbId + "Name: " + name + "ProfilePic: " + profilePic);
+            //  new RegisteFCMId(mContext).execute();
+            if (!Utils.getSharedPreferences(mContext, Constant.USER_FCMTOKENID).equals("")) {
+                callSocialSignupAPI(Constant.TYPE_FOR_EMAILID);
+            }
+            // callSocialApi(email, name, pic, "g");
+        } else {
+            Log.e("SignIN", "GOOGLE SIGN OUT");
+            // Signed out, show unauthenticated UI.
+        }
+    }
+
+    // Variable initialization and onClick method
+    private void init() {
+        Utils.setUpToolbar(mContext, getString(R.string.login));
+        loginClickHandler = new LoginClickHandler(mContext);
+        mActivityLoginBinding.setHandler(loginClickHandler);
+        mCircularLoading = new CircularLoading(mContext);
+
+        mActivityLoginBinding.tlPassword.setTypeface(ResourcesCompat.getFont(mContext, R.font.oxygen_bold));
+        mActivityLoginBinding.etPassword.setTypeface(ResourcesCompat.getFont(mContext, R.font.oxygen_bold));
+
+        FacebookSdk.sdkInitialize(getApplicationContext());
+        callbackManager = CallbackManager.Factory.create();
+        facebookSignIn();
+        new RegisteFCMId(mContext).execute();
+    }
+
+    private void facebookSignIn() {
+        LoginManager.getInstance().registerCallback(callbackManager,
+                new FacebookCallback<LoginResult>() {
+                    @Override
+                    public void onSuccess(final LoginResult loginResult) {
+
+                        GraphRequest request = GraphRequest.newMeRequest(
+                                loginResult.getAccessToken(),
+                                new GraphRequest.GraphJSONObjectCallback() {
+                                    @Override
+                                    public void onCompleted(
+                                            JSONObject object,
+                                            GraphResponse response) {
+                                        // Application code
+                                        try {
+                                            AccessToken token = AccessToken.getCurrentAccessToken();
+                                            //   Log.d("access token is: ",String.valueOf(token));
+                                            fbToken = loginResult.getAccessToken().getToken().toString();
+                                            //  fbToken=String.valueOf(token);
+                                            Log.e("Fb Data: " + object, "");
+                                            email = object.getString("email").trim();
+                                            fbId = object.getString("id").trim();
+                                            name = object.getString("name").trim();
+                                            if (object.has("gender")) {
+                                                gender = object.getString("gender").trim();
+                                            }
+                                            profilePic = "https://graph.facebook.com/" + fbId + "/picture?type=large";
+                                            if (!email.isEmpty()) {
+                                                facebookLogin();
+                                                mCircularLoading.show(getString(R.string.Please_wait));
+                                            } else {
+                                                Utils.showToast(mContext, getString(R.string.Authentication_Failed));
+                                            }
+                                        } catch (JSONException e) {
+                                            Utils.showToast(mContext, getString(R.string.Authentication_Failed));
+                                            e.printStackTrace();
+                                        }
+                                    }
+                                });
+                        Bundle parameters = new Bundle();
+                        parameters.putString("fields", "id,name,link,gender,birthday,email");
+                        request.setParameters(parameters);
+                        request.setAccessToken(loginResult.getAccessToken());
+                        request.executeAsync();
+                        Log.e("Success", "Login");
+                    }
+
+                    @Override
+                    public void onCancel() {
+                        Utils.showToast(mContext, getString(R.string.Login_Cancel));
+
+                    }
+
+                    @Override
+                    public void onError(FacebookException exception) {
+                        Utils.showToast(mContext, getString(R.string.something_wrong));
+                    }
+                });
+    }
+
+    public void facebookLogin() {
+        try {
+            LoginManager.getInstance().logOut();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        if (!Utils.getSharedPreferences(mContext, Constant.USER_FCMTOKENID).equals("")) {
+            callSocialSignupAPI(Constant.TYPE_FOR_FB);
+        }
+        // new RegisteFCMId(mContext).execute();
+    }
+
+    @Override
+    public void onSuccess(JSONObject genericResponse, String msg, int ResponseOf) {
+        if (mCircularLoading.isVisible())
+            mCircularLoading.dismiss();
+
+        switch (ResponseOf) {
+            case Constant.TYPE_LOGIN:
+                saveResponseInSharedPreference(genericResponse, msg);
+                break;
+            case Constant.TYPE_SOCIAL_REGISTRATION:
+                verifyOtpAfterSocialSignup(genericResponse);
+                break;
+        }
+    }
+
+
+    private void verifyOtpAfterSocialSignup(JSONObject genericResponse) {
+        try {
+            GenericResponse<User> genericResponse1 = new Gson().fromJson(genericResponse.toString(), GenericResponse.class);
+            JSONObject data = genericResponse.getJSONObject(Constant.DATA);
+            Gson gson = new Gson();
+            User user = gson.fromJson(data.toString(), User.class);
+            Utils.setSharedPreference(mContext, Constant.USER_ID, user.getUserId());
+            Utils.setSharedPreference(mContext, Constant.FNAME, user.getFname());
+            Utils.setSharedPreference(mContext, Constant.PHONE, user.getPhone());
+            Utils.setSharedPreference(mContext, Constant.EMAIL, user.getEmail());
+            Utils.setSharedPreference(mContext, Constant.PROFILE_PIC, user.getProfilePic());
+            Utils.setSharedPreference(mContext, Constant.ISPASSWORDACTIVE, user.getIsPasswordActive());
+            Utils.setSharedPreferenceBoolean(mContext, Constant.PHONESTATUS, user.isPhoneStatus());
+            Utils.setSharedPreferenceBoolean(mContext, Constant.EMAILSTATUS, user.isEmailStatus());
+            Utils.setSharedPreferenceBoolean(mContext, Constant.SHOW_NOTIFICATION, user.isNotify());
+
+            if (user.getUserBankAccountDetail() != null) {
+                Utils.setSharedPreference(mContext, Constant.ACCOUNTNUMBER, user.getUserBankAccountDetail().getAccountnumber());
+                Utils.setSharedPreference(mContext, Constant.ACCOUNTHOLDER, user.getUserBankAccountDetail().getAccountholder());
+                Utils.setSharedPreference(mContext, Constant.IFSC, user.getUserBankAccountDetail().getIfsc());
+            }
+          //  Utils.setSharedPreference(mContext, Constant.TOKEN, genericResponse1.getToken());
+            Log.e("After social login: ", "" + genericResponse1.getToken());
+            if (mCircularLoading.isVisible()) {
+                mCircularLoading.dismiss();
+            }
+            if (!Utils.getSharedPreferencesBoolean(mContext, Constant.PHONESTATUS)) {
+                startActivity(new Intent(mContext, ForgetPasswordActivity.class).putExtra(Constant.ADD_MOBILE, true));
+            } else {
+                Utils.setSharedPreference(mContext, Constant.TOKEN, genericResponse1.getToken());
+                Intent intent = new Intent(mContext, HomeActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                startActivity(intent);
+                finish();
+            }
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void onFailed(GenericResponse genericResponse, String msg, int ResponseOf) {
+        if (mCircularLoading.isVisible())
+            mCircularLoading.dismiss();
+
+        switch (ResponseOf) {
+            case Constant.TYPE_LOGIN:
+                Utils.showToast(mContext, msg);
+                break;
+            case Constant.TYPE_SOCIAL_REGISTRATION:
+                Utils.showToast(mContext, msg);
+                break;
+        }
+    }
+
+    @Override
+    public void onException(String msg) {
+        if (mCircularLoading.isVisible())
+            mCircularLoading.dismiss();
+    }
+
+    @Override
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+        try {
+            mGoogleApiClient.clearDefaultAccountAndReconnect();
+            Utils.showToast(mContext, getString(R.string.connection));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Click event
+    public class LoginClickHandler {
+        Context context;
+
+        public LoginClickHandler(Context context) {
+            this.context = context;
+        }
+
+        public void loginClick() {
+            if (areFieldsValid()) {
+                callLoginAPI();
+            }
+        }
+
+        public void signupClick() {
+            startActivity(new Intent(context, SignupActivity.class));
+        }
+
+        public void forgotpassClick() {
+            startActivity(new Intent(context, ForgetPasswordActivity.class));
+        }
+
+        public void fbClick() {
+            LoginManager.getInstance().logInWithReadPermissions(LoginActivity.this, Arrays.asList("public_profile", "email"));
+            Utils.View_Animation(mContext, mActivityLoginBinding.ivfb);
+        }
+
+        public void gplusClick() {
+            try {
+                if (Utils.isNetworkConnected(context)) {
+                    // status = 2;
+                    mGoogleApiClient.clearDefaultAccountAndReconnect();
+                    Intent signInIntent = Auth.GoogleSignInApi.getSignInIntent(mGoogleApiClient);
+                    startActivityForResult(signInIntent, GOOGLE_LOGIN);
+
+                } else {
+                    // MyDialog.iPhone(getString(R.string.connection), context);
+                    Utils.showToast(mContext, getString(R.string.connection));
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            Utils.View_Animation(mContext, mActivityLoginBinding.ivgplus);
+        }
+    }
+
+    // Check field validations
+    private boolean areFieldsValid() {
+        mActivityLoginBinding.tlMobile.setError(null);
+        mActivityLoginBinding.tlPassword.setError(null);
+
+        if (!ValidationUtils.checkMobileNumberValidationForIndia(mContext, mActivityLoginBinding.tlMobile, mActivityLoginBinding.etMobile, getString(R.string.Mobile_number))) {
+            return false;
+        }
+        if (!ValidationUtils.checkPasswordValidation(mContext, mActivityLoginBinding.tlPassword, mActivityLoginBinding.etPassword, getString(R.string.Password))) {
+            return false;
+        }
+        if (!Utils.isNetworkConnected(mContext)) {
+            Utils.showToast(mContext, getString(R.string.connection));
+            return false;
+        } else {
+            if (Utils.getSharedPreferences(mContext, Constant.USER_FCMTOKENID).trim().length() > 0 && Utils.getSharedPreferences(mContext, Constant.USER_DEVICEID).trim().length() > 0) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    if (!PermissionsUtils.getInstance(mContext).isPermissionGranted(mContext, Manifest.permission.RECEIVE_SMS, getString(R.string.txt_received_sms), 1)) {
+                        return false;
+                    } else
+                        return true;
+                } else
+                    return true;
+            } else {
+                new RegisteFCMId(mContext).execute();
+                return false;
+            }
+        }
+
+    }
+
+    private void callSocialSignupAPI(String type) {
+        /*"{
+""fbToken"":"""",
+""fname"":""anoop shikhrval"",
+""email"":""ebabu.indore@gmail.com"",
+""device_type"":""android"",
+""device_token"":""gfhfghfghfghfghlkfglfghjmn"",
+""profile_pic"":"""",
+""type"":2
+}"*/
+        try {
+            LoginManager.getInstance().logOut();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        try {
+            // mCircularLoading.show(getString(R.string.Please_wait));
+            JsonObject jsonObject = new JsonObject();
+            jsonObject.addProperty(Constant.FBTOKEN, fbToken);
+            jsonObject.addProperty(Constant.FNAME, name);
+            jsonObject.addProperty(Constant.EMAIL, email);
+            jsonObject.addProperty(Constant.DEVICE_TOKEN, Utils.getSharedPreferences(mContext, Constant.USER_FCMTOKENID));
+            jsonObject.addProperty(Constant.PROFILE_PIC, profilePic);
+            jsonObject.addProperty(Constant.DEVICE_TYPE, Constant.ANDROID);
+            jsonObject.addProperty(Constant.TYPE, type);
+
+            ApiInterface apiInterface = ApiClient.getClient(ConstantUrl.BASE_URL).create(ApiInterface.class);
+            Call<JsonElement> call = apiInterface.userSocialRegister(jsonObject);
+            new Repository(this).callBaseURL(this, call, Constant.TYPE_SOCIAL_REGISTRATION);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            if (mCircularLoading.isVisible())
+                mCircularLoading.dismiss();
+            Utils.showToast(mContext, getString(R.string.something_wrong));
+        }
+    }
+
+    // Call login API
+    private void callLoginAPI() {
+        mCircularLoading.show(getString(R.string.Please_wait));
+        JsonObject jsonObject = new JsonObject();
+        jsonObject.addProperty(Constant.PHONE, mActivityLoginBinding.etMobile.getText().toString().trim());
+        jsonObject.addProperty(Constant.PASSWORD, mActivityLoginBinding.etPassword.getText().toString().trim());
+        jsonObject.addProperty(Constant.DEVICE_TYPE, Constant.ANDROID);
+        jsonObject.addProperty(Constant.DEVICE_ID, Utils.getSharedPreferences(mContext, Constant.USER_DEVICEID));
+        jsonObject.addProperty(Constant.DEVICE_TOKEN, Utils.getSharedPreferences(mContext, Constant.USER_FCMTOKENID));
+
+        ApiInterface apiInterface = ApiClient.getClient(ConstantUrl.BASE_URL).create(ApiInterface.class);
+        Call<JsonElement> call = apiInterface.userLogin(jsonObject);
+        try {
+            new Repository(this).callBaseURL(this, call, Constant.TYPE_LOGIN);
+        } catch (Exception e) {
+            e.printStackTrace();
+            if (mCircularLoading.isVisible())
+                mCircularLoading.dismiss();
+            Utils.showToast(mContext, getString(R.string.something_wrong));
+        }
+    }
+
+    // Save login user data
+    private void saveResponseInSharedPreference(JSONObject genericResponse, String msg) {
+        try {
+
+            NotificationManager nMgr = (NotificationManager) mContext.getSystemService(Context.NOTIFICATION_SERVICE);
+            nMgr.cancelAll();
+
+            if (genericResponse != null && genericResponse.has(Constant.DATA)) {
+                GenericResponse<User> genericResponse1 = new Gson().fromJson(genericResponse.toString(), GenericResponse.class);
+                if (genericResponse1.getCode() == 201) {
+                    //Mobile number is not verified
+                    JSONObject jsonObject = genericResponse.getJSONObject(Constant.DATA);
+                    //   Log.e("Mobile: ",""+mActivityLoginBinding.etMobile.getText().toString().trim());
+                    //   Toast.makeText(mContext, "" + mActivityLoginBinding.etMobile.getText().toString().trim(), Toast.LENGTH_SHORT).show();
+                    startActivity(new Intent(mContext, OtpActivity.class).putExtra(Constant.USER_ID, jsonObject.getString(Constant.USER_ID).trim()).putExtra(Constant.PHONE, mActivityLoginBinding.etMobile.getText().toString().trim()));
+                } else if (genericResponse1.getCode() == 200) {
+                    //Verified-> Move to Home
+                    // Utils.showToast(mContext, msg);
+                    JSONObject data = genericResponse.getJSONObject(Constant.DATA);
+                    Gson gson = new Gson();
+                    User user = gson.fromJson(data.toString(), User.class);
+                    Utils.setSharedPreference(mContext, Constant.USER_ID, user.getUserId());
+                    Utils.setSharedPreference(mContext, Constant.FNAME, user.getFname());
+                    Utils.setSharedPreference(mContext, Constant.EMAIL, user.getEmail());
+                    Utils.setSharedPreference(mContext, Constant.PHONE, user.getPhone());
+                    Utils.setSharedPreference(mContext, Constant.PROFILE_PIC, user.getProfilePic());
+                    Utils.setSharedPreference(mContext, Constant.ISPASSWORDACTIVE, user.getIsPasswordActive());
+                    Utils.setSharedPreferenceBoolean(mContext, Constant.EMAILSTATUS, user.isEmailStatus());
+                    Utils.setSharedPreferenceBoolean(mContext, Constant.PHONESTATUS, user.isPhoneStatus());
+                    Utils.setSharedPreferenceBoolean(mContext, Constant.SHOW_NOTIFICATION, user.isNotify());
+                    Utils.setSharedPreference(mContext, Constant.TOKEN, genericResponse1.getToken());
+
+                    if (user.getUserBankAccountDetail() != null) {
+                        Utils.setSharedPreference(mContext, Constant.ACCOUNTNUMBER, user.getUserBankAccountDetail().getAccountnumber());
+                        Utils.setSharedPreference(mContext, Constant.ACCOUNTHOLDER, user.getUserBankAccountDetail().getAccountholder());
+                        Utils.setSharedPreference(mContext, Constant.IFSC, user.getUserBankAccountDetail().getIfsc());
+                    }
+
+                    Intent intent = new Intent(mContext, HomeActivity.class);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    startActivity(intent);
+                    finish();
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
+        switch (requestCode) {
+            case PermissionsUtils.REQUEST_CODE_ASK_PERMISSIONS: {
+                if (Utils.isNetworkConnected(mContext))
+                    callLoginAPI();
+                else
+                    Utils.showToast(mContext, getString(R.string.connection));
+            }
+            break;
+            default:
+                super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        }
+    }
+
+}
+
+
