@@ -1,0 +1,794 @@
+package com.kwikutbarber.activity;
+
+import android.Manifest;
+import android.animation.ValueAnimator;
+import android.app.Dialog;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.graphics.Point;
+import android.location.Location;
+import android.location.LocationManager;
+import android.os.AsyncTask;
+import android.os.Handler;
+import android.os.SystemClock;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityCompat;
+import android.support.v7.app.AlertDialog;
+import android.support.v7.app.AppCompatActivity;
+import android.os.Bundle;
+import android.util.Log;
+import android.view.animation.Interpolator;
+import android.view.animation.LinearInterpolator;
+import android.widget.Toast;
+
+import com.androidquery.AQuery;
+import com.androidquery.callback.AjaxCallback;
+import com.androidquery.callback.AjaxStatus;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.Projection;
+import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
+import com.google.android.gms.maps.model.CameraPosition;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.PolylineOptions;
+import com.kwikutbarber.Constant.Constants;
+import com.kwikutbarber.Constant.IUrlConstants;
+import com.kwikutbarber.R;
+import com.kwikutbarber.customview.CustomTextView;
+import com.kwikutbarber.interfaces.RequestCallback;
+import com.kwikutbarber.utils.AqueryCall;
+import com.kwikutbarber.utils.PathJSONParser;
+import com.kwikutbarber.utils.Utils;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
+
+import de.hdodenhof.circleimageview.CircleImageView;
+
+public class BarberTrackingActivity extends AppCompatActivity implements GoogleApiClient.OnConnectionFailedListener {
+
+    private static double user_lat;
+    private static double user_lng;
+    private static double barber_lat;
+    private static double barber_lng;
+    private Context context;
+    private GoogleMap mMap;
+    SupportMapFragment mapFragment;
+    LocationManager lm;
+    GoogleApiClient googleApiClient;
+    private double latitute, longtitude;
+    private LatLng userLoc, barberNewLoc, barberLoc, barberPrevLoc;
+    private Dialog dialog;
+    private Marker barber_marker;
+    public LocationRequest mLocationRequest;
+    public Double latitude = 0.0, longitude = 0.0;
+    public static Location lastLocation;
+    public String loginType = "";
+    private static int UPDATE_INTERVAL = 10000; // 10 sec
+    private static int FATEST_INTERVAL = 5000; // 5 sec
+    private static int DISPLACEMENT = 10; // 10 meters
+    private boolean mapIntialised = false;
+    private boolean from_notification;
+    private String barber_id = "", user_name = "", user_image = "", user_mobile_num = "", user_location = "", transport_mode = "", avg_rating = "";
+    private String booking_id;
+    private CircleImageView iv_profile;
+    private CustomTextView tvName, tvRating, tvMode;
+    private boolean notification;
+    private LatLng firstLatlng = null;
+    private LatLng oldLatlng = null;
+    private LatLng newLatlng = null;
+    private int index, next;
+    private Marker barberMarker;
+    private float v;
+    private double lat, lng;
+    private LatLng startPosition, endPosition;
+    ArrayList<LatLng> points = null;
+    private String booking_status;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_barber_tracking);
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left);
+        init();
+    }
+
+    private void init() {
+        context = this;
+        dialog = new Dialog(context);
+        Utils.setUpToolbar(context, "", R.color.colorPrimary);
+        //notification list
+        //  notification=getIntent().getBooleanExtra("notification",false);
+        from_notification = getIntent().getBooleanExtra("from_notification", false);
+        iv_profile = (CircleImageView) findViewById(R.id.iv_profile);
+        tvName = (CustomTextView) findViewById(R.id.tv_barber_name);
+        tvMode = (CustomTextView) findViewById(R.id.tv_mode);
+        tvRating = (CustomTextView) findViewById(R.id.tv_rating);
+
+          /*1 from notification
+                booking id from notification
+               call api getbooking_notification_details()
+
+          2 from splash
+          data from intent
+           call api getbooking_notification_details()
+        */
+        if (from_notification) {
+            booking_id = getIntent().getStringExtra("booking_id");
+
+        } else {
+           /* barber_id = getIntent().getStringExtra("barber_id");
+            user_name = getIntent().getStringExtra("user_name");
+            user_image = getIntent().getStringExtra("user_image");
+            user_mobile_num = getIntent().getStringExtra("user_mobile_num");
+            user_location = getIntent().getStringExtra("user_location");
+*/
+            booking_id = getIntent().getStringExtra("booking_id");
+        }
+
+        GoogleApiClient.ConnectionCallbacks connectionCallback = new GoogleApiClient.ConnectionCallbacks() {
+
+            @Override
+            public void onConnected(@Nullable Bundle bundle) {
+                if (googleApiClient.isConnected()) {
+                    if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                        return;
+                    }
+                    LocationServices.FusedLocationApi.requestLocationUpdates(googleApiClient,
+                            mLocationRequest, new com.google.android.gms.location.LocationListener() {
+                                @Override
+                                public void onLocationChanged(Location location) {
+                                    latitute = location.getLatitude();
+                                    longtitude = location.getLongitude();
+                                    //  Toast.makeText(context, "Lat: " + latitute + " Lng: " + longtitude, Toast.LENGTH_SHORT).show();
+                                    Utils.setSharedPreference(context, Constants.USER_LAT, String.valueOf(latitute));
+                                    Utils.setSharedPreference(context, Constants.USER_LNG, String.valueOf(longtitude));
+                                    //updateLatLng(String.valueOf(latitute), String.valueOf(longtitude));
+
+                                }
+                            });
+                }
+            }
+
+            @Override
+            public void onConnectionSuspended(int i) {
+
+            }
+        };
+
+        getbooking_notification_details();
+        //getBarberCurrentLatLng();
+        barber_lat = Double.parseDouble(Utils.getSharedPreferences(context, Constants.USER_LAT));
+        barber_lng = Double.parseDouble(Utils.getSharedPreferences(context, Constants.USER_LNG));
+        barberLoc = new LatLng(barber_lat, barber_lng);
+        barberNewLoc = new LatLng(barber_lat, barber_lng);
+        if (barberPrevLoc == null) {
+            barberPrevLoc = barberNewLoc;
+        }
+        // 22.709221, 75.902046.
+        // userLoc = new LatLng(22.709221, 75.902046);
+
+
+        createLocationRequest();
+        //  getbooking_notification_details();
+        // setData();
+       /* if (barberLoc != null && userLoc != null) {
+            initMap();
+        }*/
+    }
+
+    private void setData() {
+        if (!user_name.equals("")) {
+            tvName.setText(user_name);
+        } else {
+            tvName.setText(Constants.NA);
+        }
+        if (!transport_mode.equals("")) {
+            tvMode.setText(transport_mode);
+        } else {
+            tvMode.setText(Constants.NA);
+        }
+        if (!avg_rating.equals("")) {
+            tvRating.setText(avg_rating);
+        } else {
+            tvRating.setText(Constants.NA);
+        }
+        new AQuery(context).id(iv_profile).image(user_image, true, true, 300, R.mipmap.default_profile);
+
+    }
+
+    @Override
+    public void finish() {
+        if (from_notification) {
+            Intent intent = null;
+            intent = new Intent(context, BarberHomeActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+        }
+        super.finish();
+        overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right);
+    }
+
+    private void initMap() {
+        mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
+        if (mapFragment != null) {
+            mapFragment.getMapAsync(new OnMapReadyCallback() {
+                @Override
+                public void onMapReady(GoogleMap googleMap) {
+                    mMap = googleMap;
+                    googleApiClient = new GoogleApiClient.Builder(context)
+                            .addConnectionCallbacks(connectionCallback)
+                            .addApi(LocationServices.API).build();
+
+                    if (googleApiClient != null) {
+                        googleApiClient.connect();
+                    }
+                    //22.7533° N, 75.8937° E
+                    mMap.getUiSettings().setMapToolbarEnabled(false);
+                    mMap.addMarker(new MarkerOptions().position(userLoc).icon(BitmapDescriptorFactory.fromResource(R.mipmap.pointer)));
+                    mMap.moveCamera(CameraUpdateFactory.newLatLng(userLoc));
+                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(userLoc, 14));
+                    mapIntialised = true;
+                    getPath();
+                }
+            });
+        }
+
+    }
+
+
+    private void getPath() {
+        String url = getMapsApiDirectionsUrl();
+        if (url != null) {
+            new AQuery(this).ajax(url, null, JSONObject.class, new AjaxCallback<JSONObject>() {
+
+                @Override
+                public void callback(String url, JSONObject object, AjaxStatus status) {
+                    if (object != null) {
+                        new ParserTask().execute(object.toString());
+                    }
+                }
+            });
+        }
+    }
+
+
+    GoogleApiClient.ConnectionCallbacks connectionCallback = new GoogleApiClient.ConnectionCallbacks() {
+
+        @Override
+        public void onConnected(@Nullable Bundle bundle) {
+            if (googleApiClient.isConnected()) {
+                if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    return;
+                }
+                LocationServices.FusedLocationApi.requestLocationUpdates(googleApiClient,
+                        mLocationRequest, new com.google.android.gms.location.LocationListener() {
+                            @Override
+                            public void onLocationChanged(Location location) {
+                                barberPrevLoc = barberNewLoc;
+                                latitute = location.getLatitude();
+                                longtitude = location.getLongitude();
+                                barberNewLoc = new LatLng(latitude, longitude);
+                                if (barberLoc != null && userLoc != null) {
+                                    trackBarber();
+                                }
+
+                                //   Toast.makeText(context, "Lat: " + latitute + " Lng: " + longtitude, Toast.LENGTH_SHORT).show();
+                            }
+                        });
+            }
+        }
+
+        @Override
+        public void onConnectionSuspended(int i) {
+
+        }
+    };
+
+    @Override
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+
+    }
+
+
+    private class ParserTask extends
+
+            AsyncTask<String, Integer, List<List<HashMap<String, String>>>> {
+
+
+        @Override
+
+        protected List<List<HashMap<String, String>>> doInBackground(
+
+                String... jsonData) {
+
+
+            JSONObject jObject;
+
+            List<List<HashMap<String, String>>> routes = null;
+
+
+            try {
+
+                jObject = new JSONObject(jsonData[0]);
+
+                PathJSONParser parser = new PathJSONParser();
+
+                routes = parser.parse(jObject);
+
+            } catch (Exception e) {
+
+                // e.printStackTrace();
+
+                // Log.d("Background Task", e.toString());
+
+            }
+
+            return routes;
+
+        }
+
+
+        @Override
+
+        protected void onPostExecute(List<List<HashMap<String, String>>> routes) {
+
+
+            PolylineOptions polyLineOptions = null;
+
+
+            if (routes == null) {
+
+                Toast.makeText(context, "Please check internet connection", Toast.LENGTH_LONG).show();
+
+            } else if (routes.size() == 0) {
+
+                Toast.makeText(context, "Please check internet connection", Toast.LENGTH_LONG).show();
+
+            } else {
+
+                // traversing through routes
+
+                for (int i = 0; i < routes.size(); i++) {
+
+                    points = new ArrayList<LatLng>();
+
+                    polyLineOptions = new PolylineOptions();
+
+                    List<HashMap<String, String>> path = routes.get(i);
+
+
+                    for (int j = 0; j < path.size(); j++) {
+
+                        HashMap<String, String> point = path.get(j);
+
+
+                        double lat = Double.parseDouble(point.get("lat"));
+
+                        double lng = Double.parseDouble(point.get("lng"));
+
+                        LatLng position = new LatLng(lat, lng);
+
+                        points.add(position);
+                        if (firstLatlng == null) {
+                            firstLatlng = points.get(j);
+                        }
+
+                    }
+
+
+                    polyLineOptions.addAll(points);
+
+                    polyLineOptions.width(5);
+
+                    polyLineOptions.color(Color.parseColor("#d3a117"));
+
+                }
+
+            }
+
+            try {
+
+                mMap.addPolyline(polyLineOptions);
+                //  Marker marker;
+                if (firstLatlng != null) {
+                    if (transport_mode.equalsIgnoreCase("Car")) {
+                        barberMarker = mMap.addMarker(new MarkerOptions().position(firstLatlng).icon(BitmapDescriptorFactory.fromResource(R.mipmap.car)));
+                        mMap.moveCamera(CameraUpdateFactory.newCameraPosition(new CameraPosition.Builder()
+                                .target(mMap.getCameraPosition().target)
+                                .zoom(17)
+                                .build()));
+
+                    } else if (transport_mode.equalsIgnoreCase("Bike")) {
+                        barberMarker = mMap.addMarker(new MarkerOptions().position(firstLatlng).icon(BitmapDescriptorFactory.fromResource(R.mipmap.bike)));
+                        mMap.moveCamera(CameraUpdateFactory.newCameraPosition(new CameraPosition.Builder()
+                                .target(mMap.getCameraPosition().target)
+                                .zoom(17)
+                                .build()));
+
+                    } else if (transport_mode.equalsIgnoreCase("Bicycle")) {
+                        barberMarker = mMap.addMarker(new MarkerOptions().position(firstLatlng).icon(BitmapDescriptorFactory.fromResource(R.mipmap.cycle)));
+                        mMap.moveCamera(CameraUpdateFactory.newCameraPosition(new CameraPosition.Builder()
+                                .target(mMap.getCameraPosition().target)
+                                .zoom(17)
+                                .build()));
+
+                    }
+                    trackBarber();
+                }
+
+            } catch (Exception e) {
+
+                Toast.makeText(context, "Path not found", Toast.LENGTH_LONG).show();
+
+            }
+
+        }
+
+    }
+
+    private float getBearing(LatLng begin, LatLng end) {
+        double lat = Math.abs(begin.latitude - end.latitude);
+        double lng = Math.abs(begin.longitude - end.longitude);
+
+        if (begin.latitude < end.latitude && begin.longitude < end.longitude)
+            return (float) (Math.toDegrees(Math.atan(lng / lat)));
+        else if (begin.latitude >= end.latitude && begin.longitude < end.longitude)
+            return (float) ((90 - Math.toDegrees(Math.atan(lng / lat))) + 90);
+        else if (begin.latitude >= end.latitude && begin.longitude >= end.longitude)
+            return (float) (Math.toDegrees(Math.atan(lng / lat)) + 180);
+        else if (begin.latitude < end.latitude && begin.longitude >= end.longitude)
+            return (float) ((90 - Math.toDegrees(Math.atan(lng / lat))) + 270);
+        return -1;
+    }
+
+    private String getMapsApiDirectionsUrl() {
+
+      /*String waypoints = "origin=" + LOWER_MANHATTAN.latitude + ","
+
+                + LOWER_MANHATTAN.longitude + "&destination="
+
+                + WALL_STREET.latitude + "," + WALL_STREET.longitude;*/
+        /*String waypoints = "origin=" + user_lat + ","
+
+                + user_lng + "&destination="
+
+                + barber_lat + "," + barber_lng;*/
+        String waypoints = "origin=" + barberLoc.latitude + ","
+
+                + barberLoc.longitude + "&destination="
+
+                + userLoc.latitude + "," + userLoc.longitude;
+
+        String sensor = "sensor=false";
+
+        String params = waypoints + "&" + sensor;
+
+        String output = "json";
+
+        String url = "https://maps.googleapis.com/maps/api/directions/"
+
+                + output + "?" + params + "&key=AIzaSyBkuoTbg_BEYBn4N5vNf-FycIBzDGrSJ98";
+        Log.e("Location: ", "" + url);
+
+        return url;
+
+    }
+
+   /* private void getBarberCurrentLatLng() {
+        oldLatlng = barberLoc;
+        JSONObject jsonObject = new JSONObject();
+        try {
+            if (barber_id != null) {
+                jsonObject.put("barber_id", barber_id);
+            }
+
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        new AqueryCall(this).postWithJsonToken(IUrlConstants.GET_LAT_LONG, Utils.getSharedPreferences(context, Constants.USER_TOKEN), jsonObject, new RequestCallback() {
+            @Override
+            public void onSuccess(JSONObject js, String success) {
+                try {
+                    JSONObject object = js.getJSONObject("data");
+                    barber_lat = Double.parseDouble(object.getString("lat"));
+                    barber_lng = Double.parseDouble(object.getString("long"));
+                    Log.e("Barber: ", "Lat: " + barber_lat + " Long: " + barber_lng);
+                    Log.e("Customer: ", "Lat: " + user_lat + " Long: " + user_lng);
+                    barberLoc = new LatLng(barber_lat, barber_lng);
+                    newLatlng = new LatLng(barber_lat, barber_lng);
+                    if (!mapIntialised) {
+                        initMap();
+                    } else {
+                        barberNewLoc = new LatLng(barber_lat, barber_lng);
+                        //  animateMarker(barber_marker, barberLoc, false);
+                    }
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                //  Toast.makeText(context, "" + success, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onFailed(JSONObject js, String failed) {
+                Toast.makeText(context, "" + failed, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onAuthFailed(JSONObject js, String failed) {
+                Utils.openDialogCheckToken(context);
+            }
+
+            @Override
+            public void onNull(JSONObject js, String nullp) {
+                Toast.makeText(context, "" + nullp, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onException(JSONObject js, String exception) {
+                Toast.makeText(context, "" + exception, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onInactive(JSONObject js, String inactive, String status) {
+                Utils.openDialogCheckInActiveUser(context, inactive);
+            }
+        });
+
+    }*/
+
+    private void markerAnimation(Location prevLoc, Location newLoc) {
+
+/*
+      double[] startValues = new double[]{prevLoc.getLatitude(), prevLoc.getLongitude()};
+        double[] endValues = new double[]{newLoc.getLatitude(), newLoc.getLongitude()};
+        ValueAnimator latLngAnimator = ValueAnimator.ofObject(new DoubleArrayEvaluator(), startValues, endValues);
+        latLngAnimator.setDuration(100);
+        latLngAnimator.setInterpolator(new DecelerateInterpolator());
+        latLngAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator animation) {
+                double[] animatedValue = (double[]) animation.getAnimatedValue();
+                barber_marker.setPosition(new LatLng(animatedValue[0], animatedValue[1]));
+
+//                mMap.moveCamera(CameraUpdateFactory.newLatLng(new LatLng(animatedValue[0], animatedValue[1])));
+//                mMap.animateCamera(CameraUpdateFactory.zoomTo(17));
+            }
+        });
+        latLngAnimator.start();
+*/
+
+
+        //Get the current location
+    /*  Location startingLocation = new Location(oldLatlng.latitude,oldLatlng.longitude);
+      startingLocation.setLatitude(mMap.getCameraPosition().target.latitude);
+      startingLocation.setLongitude(mMap.getCameraPosition().target.longitude);
+
+      //Get the target location
+      Location endingLocation = new Location("ending point");
+      endingLocation.setLatitude(newLatlng.latitude);
+      endingLocation.setLongitude(newLatlng.longitude);
+
+      //Find the Bearing from current location to next location
+      float targetBearing = startingLocation.bearingTo(endingLocation);
+*/
+    }
+
+ /*      //Get the current location
+      Location startingLocation = new Location("starting point");
+      startingLocation.setLatitude(myMap.getCameraPosition().target.latitude);
+      startingLocation.setLongitude(myMap.getCameraPosition().target.longitude);
+
+      //Get the target location
+      Location endingLocation = new Location("ending point");
+      endingLocation.setLatitude(<target>.latitude);
+      endingLocation.setLongitude(<target>.longitude);
+
+      //Find the Bearing from current location to next location
+      float targetBearing = startingLocation.bearingTo(endingLocation);*/
+
+    public void animateMarker(final Marker marker, final LatLng toPosition,
+                              final boolean hideMarker) {
+        final Handler handler = new Handler();
+        final long start = SystemClock.uptimeMillis();
+        Projection proj = mMap.getProjection();
+        Point startPoint = proj.toScreenLocation(marker.getPosition());
+        final LatLng startLatLng = proj.fromScreenLocation(startPoint);
+        final long duration = 500;
+        final Interpolator interpolator = new LinearInterpolator();
+
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                long elapsed = SystemClock.uptimeMillis() - start;
+                float t = interpolator.getInterpolation((float) elapsed
+                        / duration);
+                double lng = t * toPosition.longitude + (1 - t)
+                        * startLatLng.longitude;
+                double lat = t * toPosition.latitude + (1 - t)
+                        * startLatLng.latitude;
+                marker.setPosition(new LatLng(lat, lng));
+
+                if (t < 1.0) {
+                    // Post again 16ms later.
+                    handler.postDelayed(this, 16);
+                } else {
+                    if (hideMarker) {
+                        marker.setVisible(false);
+                    } else {
+                        marker.setVisible(true);
+                    }
+                }
+            }
+        });
+    }
+
+    private void trackBarber() {
+        if (barberMarker != null) {
+            ValueAnimator valueAnimator = ValueAnimator.ofFloat(0, 1);
+            valueAnimator.setDuration(3000);
+            valueAnimator.setInterpolator(new LinearInterpolator());
+            valueAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+                @Override
+                public void onAnimationUpdate(ValueAnimator valueAnimator) {
+                    v = valueAnimator.getAnimatedFraction();
+                    lat = barber_lat;
+                    lng = barber_lng;
+                    LatLng newPos = new LatLng(lat, lng);
+                    barberMarker.setPosition(newPos);
+                    barberMarker.setAnchor(0.5f, 0.5f);
+
+
+                    Location prevLoc = new Location("service Provider");
+                    prevLoc.setLatitude(barberPrevLoc.latitude);
+                    prevLoc.setLongitude(barberPrevLoc.longitude);
+
+
+                    Location newLoc = new Location("service Provider");
+                    newLoc.setLatitude(barberNewLoc.latitude);
+                    newLoc.setLongitude(barberNewLoc.longitude);
+
+
+                    float bearing = prevLoc.bearingTo(newLoc);
+                    //  barberMarker.setRotation(getBearing(startPosition, newPos));
+                    barberMarker.setRotation(bearing);
+                    mMap.moveCamera(CameraUpdateFactory
+                            .newCameraPosition
+                                    (new CameraPosition.Builder()
+                                            .target(newPos)
+                                            .zoom(15.5f)
+                                            .build()));
+                }
+            });
+            valueAnimator.start();
+        }
+
+    }
+
+    protected void createLocationRequest() {
+        mLocationRequest = new LocationRequest();
+        mLocationRequest.setInterval(UPDATE_INTERVAL);
+        mLocationRequest.setFastestInterval(FATEST_INTERVAL);
+        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+        mLocationRequest.setSmallestDisplacement(DISPLACEMENT);
+    }
+
+    private void getbooking_notification_details() {
+        JSONObject jsonObject = new JSONObject();
+        try {
+            jsonObject.put("type", 1);
+            jsonObject.put("booking_id", booking_id);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        new AqueryCall(this).postWithJsonToken(IUrlConstants.BOOKING_NOTIFICATION_DETAILS, Utils.getSharedPreferences(context, Constants.USER_TOKEN), jsonObject, new RequestCallback() {
+            @Override
+            public void onSuccess(JSONObject js, String success) {
+                /*"{
+    ""status"": ""success"",
+    ""message"": ""successfully"",
+    ""data"": {
+        ""barber_id"": ""114"",
+        ""user_name"": ""Nishant"",
+        ""user_image"": ""https://kwikuts.co.uk/uploads/barber_image/1520417477582final.jpeg"",
+        ""transport_mode"": """",
+        ""avg_rating"": 0
+    }
+}"*/
+                /*{"barber_id":"114","user_name":"Monika Gupta","user_image":"https:\/\/lh3.googleusercontent.com\/-mS2WL7gRpZE\/AAAAAAAAAAI\/AAAAAAAAAdk\/S5PTPq30ts8\/photo.jpg","user_lat":"","user_long":"","transport_mode":""}}*/
+                try {
+                    JSONObject object = js.getJSONObject("data");
+                    barber_id = object.getString("barber_id");
+                    user_name = object.getString("user_name");
+                    user_image = object.getString("user_image");
+                    transport_mode = object.getString("transport_mode");
+                    if (object.getString("user_lat").equals("") || object.getString("user_long").equals("")) {
+                        opendialogToexitTracking();
+                    }
+
+                    if (!object.getString("user_lat").equals("") && !object.getString("user_long").equals("")){
+                        lat = Double.parseDouble(object.getString("user_lat"));
+                        lng = Double.parseDouble(object.getString("user_long"));
+                    }
+                    booking_status = object.getString("booking_status");
+                   /* if (object.getString("user_lat").equals("") ||object.getString("user_long").equals("") ){
+                        opendialogToexitTracking();
+                    }*/
+                    if (lat != 0.00 && lng != 0.00) {
+                        userLoc = new LatLng(lat, lng);
+                    }
+                    if (barberLoc != null && userLoc != null) {
+                        initMap();
+                    }
+                    setData();
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            @Override
+            public void onFailed(JSONObject js, String failed) {
+                Toast.makeText(context, "" + failed, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onAuthFailed(JSONObject js, String failed) {
+                Utils.openDialogCheckToken(context);
+            }
+
+            @Override
+            public void onNull(JSONObject js, String nullp) {
+                Toast.makeText(context, "" + nullp, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onException(JSONObject js, String exception) {
+               // Toast.makeText(context, "" + exception, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onInactive(JSONObject js, String inactive, String status) {
+                Utils.openDialogCheckInActiveUser(context, inactive);
+                //Toast.makeText(context, "" + inactive, Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private void opendialogToexitTracking() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setMessage("This booking is no more available");
+        //  builder.setTitle("Booking Not Found");
+        builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialogInterface, int i) {
+                finish();
+            }
+
+        });
+        builder.setCancelable(false);
+        builder.create().show();
+    }
+
+}
