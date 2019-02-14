@@ -1,3 +1,20 @@
+public void sendCatalogVia(ArrayList<String> url,String catalogue) {
+
+        ArrayList<String> mStringArrayList = new ArrayList<>();
+        for (int j = 0; j <= url.size()-1; j++) {
+            mStringArrayList.add(url.get(j));
+        }
+       // mStringArrayList.add(0, url);
+
+        if (mStringArrayList.size() > 0) {
+            ShareImageViaSocial shareImageViaSocial = new ShareImageViaSocial(mcontext,catalogue);
+            shareImageViaSocial.openDialogToShareImageVia(mStringArrayList, mcontext);
+        } else {
+            Utils.showToast(mcontext, mcontext.getString(R.string.msg_no_images_available_to_share));
+        }
+    }
+
+
 
 
 import android.app.Activity;
