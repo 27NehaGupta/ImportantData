@@ -1,0 +1,201 @@
+package com.ebabu.sellerbiz.rest;
+
+import com.ebabu.sellerbiz.constant.Constant;
+import com.ebabu.sellerbiz.constant.ConstantUrl;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.Map;
+
+import okhttp3.MultipartBody;
+import okhttp3.RequestBody;
+import retrofit2.Call;
+import retrofit2.http.Body;
+import retrofit2.http.DELETE;
+import retrofit2.http.GET;
+import retrofit2.http.Header;
+import retrofit2.http.Multipart;
+import retrofit2.http.POST;
+import retrofit2.http.PUT;
+import retrofit2.http.Part;
+import retrofit2.http.PartMap;
+import retrofit2.http.Path;
+import retrofit2.http.Query;
+import retrofit2.http.Url;
+
+
+public interface ApiInterface {
+
+    @POST(ConstantUrl.REGISTER)
+    Call<JsonElement> userRegister(@Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.ADDCART)
+    Call<JsonElement> useAddToCart(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.SOCIALSIGNUP)
+    Call<JsonElement> userSocialRegister(@Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.OTP_VERIFICATION)
+    Call<JsonElement> userVerifyOtp(@Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.RESENDOTP)
+    Call<JsonElement> userResendOtp(@Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.LOGIN)
+    Call<JsonElement> userLogin(@Body JsonObject jsonObject);
+
+    @PUT(ConstantUrl.UPDATEMOBILE)
+    Call<JsonElement> userUpdateEmailPhone(@Body JsonObject jsonObject);
+
+    @PUT(ConstantUrl.EDITCART)
+    Call<JsonElement> userEditCart(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+    @PUT(ConstantUrl.BANKDETAIL_CHANGEREQUEST)
+    Call<JsonElement> userBankDetailUpdateRequest(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.FORGOTPASSWORD)
+    Call<JsonElement> userforgotPassword(@Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.RESETPASSWORD)
+    Call<JsonElement> userResetPassword(@Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.ADDBANKDETAIL)
+    Call<JsonElement> userAddBankDetails(@Header(Constant.AUTHORIZATION) String token
+            , @Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.CHANGEPASSWORD)
+    Call<JsonElement> userChangePassword(@Header(Constant.AUTHORIZATION) String token
+            , @Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.GETBYCATEGORY)
+    Call<JsonElement> usergetSubCategories(@Header(Constant.AUTHORIZATION) String token
+            , @Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.CHECKPINCODE)
+    Call<JsonElement> userCheckPincode(@Header(Constant.AUTHORIZATION) String token
+            , @Body JsonObject jsonObject);
+
+    @GET(ConstantUrl.HELPCONTENT)
+    Call<JsonElement> userHelpContent(@Header(Constant.AUTHORIZATION) String token);
+
+    @GET(ConstantUrl.CATEGORIES)
+    Call<JsonElement> usergetCategories(@Header(Constant.AUTHORIZATION) String token);
+
+    @GET(ConstantUrl.GETLINK)
+    Call<JsonElement> userYoutubeLink(@Header(Constant.AUTHORIZATION) String token);
+
+    @GET(ConstantUrl.BANNER)
+    Call<JsonElement> userBannerList(@Header(Constant.AUTHORIZATION) String token);
+
+    @GET(ConstantUrl.REVIEWLISTBYPRODUCT)
+    Call<JsonElement> usergetReviewListByProduct(@Header(Constant.AUTHORIZATION) String token, @Query("productId") String productId);
+
+    @GET(ConstantUrl.GETPAGECONTENT)
+    Call<JsonElement> usergetPageContent(@Header(Constant.AUTHORIZATION) String token, @Query("id") int id);
+
+    @GET(ConstantUrl.HOMESUBCATEGORY)
+    Call<JsonElement> usergetHomeSubCategories(@Header(Constant.AUTHORIZATION) String token, @Query("page") int page, @Query("categoryId") String categoryId, @Query("offerstatus") String offerstatus);
+
+    @GET(ConstantUrl.EARNING)
+    Call<JsonElement> usergetTotalEarning(@Header(Constant.AUTHORIZATION) String token, @Query("page") int page);
+
+    @GET(ConstantUrl.GETCATALOUGE_BY_SUBCATEGORY)
+    Call<JsonElement> usergetcatalougeBySubcategorys(@Header(Constant.AUTHORIZATION) String token, @Query("searchkey") String searchkey, @Query("id") String catagory, @Query("subcategoryId") String subcatgory, @Query("sortby") String sortby);
+
+    @GET(ConstantUrl.PRODUCTLIST_BY_CATELOGUE)
+    Call<JsonElement> usergetProductListByCatalog(@Header(Constant.AUTHORIZATION) String token, @Query("page") int page, @Query("catalogueId") String catalogueId);
+
+    @GET(ConstantUrl.PROMOCODE)
+    Call<JsonElement> usergetPromocodelist(@Header(Constant.AUTHORIZATION) String token);
+
+    @GET(ConstantUrl.FAQLIST)
+    Call<JsonElement> userGetFaqList(@Header(Constant.AUTHORIZATION) String token);
+
+    @GET(ConstantUrl.VIEWCART)
+    Call<JsonElement> userViewCart(@Header(Constant.AUTHORIZATION) String token, @Query("promocode") String promocode);
+
+    @POST(ConstantUrl.DELETECARTITEM)
+    Call<JsonElement> deleteCart(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.APPLYPROMOCODE)
+    Call<JsonElement> applyPromocode(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.REQUESTFORREFEREARN)
+    Call<JsonElement> requestForReferEarn(@Header(Constant.AUTHORIZATION) String token);
+
+    @POST(ConstantUrl.REQUESTBOOKANDTRY)
+    Call<JsonElement> requestBookAndTry(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.ORDERCHECK)
+    Call<JsonElement> orderCheck(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.ORDERPLACE)
+    Call<JsonElement> orderPlace(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+
+    @POST(ConstantUrl.RATINGREVIEW)
+    Call<JsonElement> rateProduct(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.PRODUCTRETURNREQUEST)
+    Call<JsonElement> returnProduct(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.CANCELORDERBYUSER)
+    Call<JsonElement> cancelProduct(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+    @GET(ConstantUrl.ORDERHISTORY)
+    Call<JsonElement> orderHistory(@Header(Constant.AUTHORIZATION) String token, @Query("type") int type, @Query("page") int page);
+
+    @GET(ConstantUrl.USERNOTIFICATIONLIST)
+    Call<JsonElement> userNotificationList(@Header(Constant.AUTHORIZATION) String token, @Query("page") int page);
+
+    @GET(ConstantUrl.USERCARTCOUNT)
+    Call<JsonElement> getCartCount(@Header(Constant.AUTHORIZATION) String token);
+
+    @GET(ConstantUrl.GETUSERBANKDETIAL)
+    Call<JsonElement> getgetUserBankDetial(@Header(Constant.AUTHORIZATION) String token);
+
+    @GET(ConstantUrl.USERNOTIFICATIONCOUNT)
+    Call<JsonElement> getNotificationCount(@Header(Constant.AUTHORIZATION) String token);
+
+    @Multipart
+    @PUT(ConstantUrl.PROFILE_EDIT)
+    Call<JsonElement> ProfileEdit(@Part MultipartBody.Part pic, @PartMap Map<String, RequestBody> body, @Header(Constant.AUTHORIZATION) String token);
+
+
+    @PUT(ConstantUrl.READNOTIFICATION)
+    Call<JsonElement> readNotification(@Header(Constant.AUTHORIZATION) String token, @Path("id") String id);
+
+    @GET(ConstantUrl.PRODUCTDETAILS)
+    Call<JsonElement> productDetails(@Header(Constant.AUTHORIZATION) String token, @Path("id") String id);
+
+    @GET(ConstantUrl.GETUSERADDRESS)
+    Call<JsonElement> getUserAddress(@Header(Constant.AUTHORIZATION) String token);
+
+/*
+ @PUT(ConstantUrl.READNOTIFICATION)
+    Call<JsonElement> readNotification(@Header(Constant.AUTHORIZATION) String token, @Query("id") int userId);
+*/
+
+
+    /* @POST("get_check_sum")
+     Call<JsonElement> generateCheckSum(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+ */
+    @POST(ConstantUrl.GENERATECHECKSUM)
+    Call<JsonElement> generateCheckSum(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.CHECKADDRESSPINCODE)
+    Call<JsonElement> checkAddressPincode(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+    @POST(ConstantUrl.ADDUSERADDRESS)
+    Call<JsonElement> addUserAddress(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+    @DELETE(ConstantUrl.DELETEADDRESS)
+    Call<JsonElement> deleteUserAddress(@Header(Constant.AUTHORIZATION) String token, @Path("id") String id);
+
+    @POST(ConstantUrl.ISNOTIFYUSER)
+    Call<JsonElement> isNotifyUser(@Header(Constant.AUTHORIZATION) String token, @Body JsonObject jsonObject);
+
+}
