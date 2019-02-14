@@ -1,0 +1,89 @@
+package com.ebabu.sellerbiz.rest;
+
+import android.app.Activity;
+
+import com.ebabu.sellerbiz.R;
+import com.ebabu.sellerbiz.bean.GenericResponse;
+import com.ebabu.sellerbiz.constant.ConstantUrl;
+import com.ebabu.sellerbiz.interfaces.ApiResponse;
+import com.ebabu.sellerbiz.utility.Utils;
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+
+import org.json.JSONObject;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
+public class Repository {
+
+    private Activity mContext;
+    private ApiInterface apiInterface;
+
+    public Repository(Activity context) {
+        this.mContext = context;
+        apiInterface = ApiClient.getClient(ConstantUrl.BASE_URL).create(ApiInterface.class);
+    }
+
+    public void callBaseURL(final ApiResponse requestCallback, Call call, final int type) {
+        try {
+            if (call != null) {
+                call.enqueue(new Callback<JsonElement>() {
+                    @Override
+                    public void onResponse(Call<JsonElement> call, Response<JsonElement> response) {
+                        try {
+                            if (response.isSuccessful()) {
+
+                                if (response.body() != null) {
+                                    JsonElement jsonElement = (JsonElement) response.body();
+                                    JSONObject jsonObject = new JSONObject(jsonElement.toString());
+                                    GenericResponse genericResponse = new Gson().fromJson(jsonElement.toString(), GenericResponse.class);
+                                    requestCallback.onSuccess(jsonObject, genericResponse.getMessage(), type);
+                                }
+
+                            } else {
+
+                                if (response.code() == 401) {
+                                    Utils.openDialogToShowMsg(mContext, mContext.getString(R.string.session_expire), mContext.getString(R.string.session_expire_msg));
+                                    requestCallback.onException("");
+                                } else if (response.code() == 403) {
+                                    Utils.openDialogToShowMsg(mContext, mContext.getString(R.string.block_admin), mContext.getString(R.string.block_admin_msg));
+                                    requestCallback.onException("");
+                                } else if (response.code() == 422) {
+                                    JSONObject MainOBJ = new JSONObject(response.errorBody().string());
+                                    GenericResponse genericResponse = new Gson().fromJson(MainOBJ.toString(), GenericResponse.class);
+                                    requestCallback.onFailed(genericResponse, genericResponse.getMessage(), type);
+                                } else
+                                    nullCase(false, requestCallback, type);
+                            }
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            nullCase(false, requestCallback, type);
+                        }
+
+                    }
+
+                    @Override
+                    public void onFailure(Call<JsonElement> call, Throwable t) {
+                        nullCase(true, requestCallback, type);
+                    }
+                });
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            nullCase(false, requestCallback, type);
+        }
+
+    }
+
+    private void nullCase(boolean isNetwork, ApiResponse request, int type) {
+        if (isNetwork)
+            Utils.showToast(mContext, mContext.getString(R.string.connection));
+        else
+            Utils.showToast(mContext, mContext.getString(R.string.something_wrong));
+
+        request.onException("");
+    }
+
+}
